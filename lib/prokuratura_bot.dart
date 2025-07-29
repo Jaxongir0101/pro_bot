@@ -24,6 +24,28 @@ void startBot() async {
     );
   });
 
+  teledart.onCommand('reply').listen((message) async {
+    final text = message.text!;
+    final parts = text.split(' ');
+
+    if (parts.length >= 3) {
+      final targetUserId = int.tryParse(parts[1]);
+
+      if (targetUserId != null) {
+        final replyText = parts.sublist(2).join(' ');
+        await teledart.sendMessage(
+            targetUserId, '✉️ Admindan javob:\n$replyText');
+        await teledart.sendMessage(message.chat.id, '✅ Javob yuborildi.');
+      } else {
+        await teledart.sendMessage(message.chat.id,
+            '❌ Noto‘g‘ri format. Misol: /reply 123456789 Salom!');
+      }
+    } else {
+      await teledart.sendMessage(message.chat.id,
+          '❌ Kamida 3 ta so‘z kerak. Misol: /reply 123456789 Salom!');
+    }
+  });
+
   teledart.onMessage().listen((msg) async {
     final id = msg.chat.id;
     if (!userStates.containsKey(id)) return;
@@ -136,10 +158,10 @@ void startBot() async {
         state['step'] = 'confirm';
         final summary = '''
 📝 Kiritilgan ma’lumotlar:
-👤 Ism: ${d['name']}
-📍 Manzil: ${d['address']}
-📞 Telefon: ${d['phone']}
-💬 Murojaat: ${d['text']}
+👤 Ism: ${d['name'] ?? '❓'}
+📍 Manzil: ${d['address'] ?? '❓'}
+📞 Telefon: ${d['phone'] ?? '❓'}
+💬 Murojaat: ${d['text'] ?? '❓'}
 ''';
         await teledart.sendMessage(id, summary);
         await teledart.sendMessage(
@@ -148,9 +170,13 @@ void startBot() async {
           replyMarkup: InlineKeyboardMarkup(inlineKeyboard: [
             [
               InlineKeyboardButton(
-                  text: '✅ Ha, to‘g‘ri', callbackData: 'confirm_yes'),
+                text: '✅ Ha, to‘g‘ri',
+                callbackData: 'confirm_yes',
+              ),
               InlineKeyboardButton(
-                  text: '♻️ Yo‘q, qayta kiritaman', callbackData: 'confirm_no'),
+                text: '♻️ Yo‘q, qayta kiritaman',
+                callbackData: 'confirm_no',
+              ),
             ]
           ]),
         );
@@ -159,20 +185,37 @@ void startBot() async {
       case 'confirm_yes':
         final finalSummary = '''
 🆕 Yangi murojaat:
-👤 Ism: ${d['name']}
-📍 Manzil: ${d['address']}
-📞 Telefon: ${d['phone']}
-💬 Murojaat: ${d['text']}
+🆔 Telegram ID: $id
+👤 Ism: ${d['name'] ?? '❓'}
+📍 Manzil: ${d['address'] ?? '❓'}
+📞 Telefon: ${d['phone'] ?? '❓'}
+💬 Murojaat: ${d['text'] ?? '❓'}
+
+✍️ Javob berish: /reply $id [javob matni]
 ''';
+
         await teledart.sendMessage(adminId, finalSummary);
-        await teledart.sendMessage(id,
-            '✅ Ma’lumotlaringiz yuborildi. /start bilan yana yuborishingiz mumkin.');
+
+        // Fayllar bo‘lsa, adminga jo‘natamiz
+        if (d.containsKey('files') && d['files'] is List) {
+          for (final file in d['files']) {
+            await teledart.sendDocument(adminId, file);
+          }
+        }
+
+        await teledart.sendMessage(
+          id,
+          '✅ Murojaatingiz qabul qilindi. Tez orada sizga javob beriladi. /start bilan yana yuborishingiz mumkin.',
+        );
+
         userStates.remove(id);
         break;
 
       case 'confirm_no':
         await teledart.sendMessage(
-            id, '♻️ Qayta boshlash uchun /start ni bosing.');
+          id,
+          '♻️ Qayta boshlash uchun /start ni bosing.',
+        );
         userStates.remove(id);
         break;
     }
