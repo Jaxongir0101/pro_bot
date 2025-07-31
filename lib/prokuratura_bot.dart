@@ -11,39 +11,67 @@ void startBot() async {
   final telegram = Telegram(botToken);
   final me = await telegram.getMe();
   final teledart = TeleDart(botToken, Event(me.username!));
+  final adminIds = [1794743491, 987654321]; // Admin Telegram ID lar
+
+  final Map<int, List<dynamic>> adminReplyData = {};
 
   final userStates = <int, Map<String, dynamic>>{};
-
   teledart.start();
 
-  teledart.onCommand('start').listen((msg) {
-    userStates[msg.chat.id] = {'step': 'name', 'data': {}};
-    teledart.sendMessage(
-      msg.chat.id,
-      '👋 Salom! Murojaat/taklif yuborish uchun ism‑familiyangizni kiriting:',
-    );
+  final List<String> districts = [
+    "Жиззах шаҳар",
+    "Арнасой тумани",
+    "Бахмал тумани",
+    "Доʻстлик тумани",
+    "Фориш тумани",
+    "Гʻаллаорол тумани",
+    "Мирзачоʻл тумани",
+    "Пахтакор тумани",
+    "Янгиобод тумани",
+    "Зарбдор тумани",
+    "Зафаробод тумани",
+    "Зомин тумани",
+    "Шароф Рашидов тумани",
+  ];
+
+  teledart.onCommand('start').listen((msg) async {
+    final id = msg.chat.id;
+
+    if (adminIds.contains(id)) {
+      await teledart.sendMessage(
+        id,
+        '👋 Админ панелга хуш келибсиз.',
+        replyMarkup: ReplyKeyboardMarkup(
+          keyboard: [
+            [KeyboardButton(text: '📨 Фойдаланувчига жавоб бериш')],
+          ],
+          resizeKeyboard: true,
+          oneTimeKeyboard: false,
+        ),
+      );
+    } else {
+      userStates[msg.chat.id] = {'step': 'name', 'data': {}};
+      teledart.sendMessage(
+        msg.chat.id,
+        '👋 Ассалом алекум! ҳурматли фуқаро, Ариза, таклиф ва мурожаатларни  юбориш учун исм‑фамилиянгизни киритинг:',
+      );
+    }
   });
 
-  teledart.onCommand('reply').listen((message) async {
-    final text = message.text!;
-    final parts = text.split(' ');
+  teledart.onCommand('reply').listen((msg) async {
+    final id = msg.chat.id;
 
-    if (parts.length >= 3) {
-      final targetUserId = int.tryParse(parts[1]);
-
-      if (targetUserId != null) {
-        final replyText = parts.sublist(2).join(' ');
-        await teledart.sendMessage(
-            targetUserId, '✉️ Admindan javob:\n$replyText');
-        await teledart.sendMessage(message.chat.id, '✅ Javob yuborildi.');
-      } else {
-        await teledart.sendMessage(message.chat.id,
-            '❌ Noto‘g‘ri format. Misol: /reply 123456789 Salom!');
-      }
-    } else {
-      await teledart.sendMessage(message.chat.id,
-          '❌ Kamida 3 ta so‘z kerak. Misol: /reply 123456789 Salom!');
+    if (!adminIds.contains(id)) {
+      await teledart.sendMessage(id, '❌ Сизда бу буйруқ учун рухсат ёқ.');
+      return;
     }
+
+    // Adminni foydalanuvchi ID kiritish bosqichiga o‘tkazamiz
+    userStates[id] = {'step': 'await_user_id'};
+    adminReplyData[id] = [];
+
+    await teledart.sendMessage(id,
+        '👤 Жавоб юбормоқчи бўлган фуқаронинг Телеграм ИД сини киритинг:');
   });
 
   teledart.onMessage().listen((msg) async {
@@ -51,32 +79,183 @@ void startBot() async {
     if (!userStates.containsKey(id)) return;
 
     final state = userStates[id]!;
-    final step = state['step'] as String;
+    final step = state['step'];
 
-    // Xavfsiz convert qilish
-    final data = (state['data'] as Map).cast<String, dynamic>();
-    state['data'] = data; // yangilab qo‘yish kerak bo‘lishi mumkin
+    final data = (state['data'] as Map?)?.cast<String, dynamic>() ?? {};
+    state['data'] = data;
+
+    if (adminIds.contains(id)) {
+      if (msg.text == '📨 Fuqaroga javob berish') {
+        userStates[id] = {'step': 'await_user_id'};
+        adminReplyData[id] = [];
+        await teledart.sendMessage(
+            id, '🆔 Фуқаронинг телеграм ИД сини киритинг:');
+        return;
+      }
+      // Admin ID yuborgan bo‘lsa
+      if (userStates[id]?['step'] == 'await_user_id') {
+        print("await_user_id");
+        final targetId = int.tryParse(msg.text ?? '');
+        if (targetId != null) {
+          try {
+            userStates[id]!['step'] = 'replying';
+            userStates[id]!['target'] = targetId;
+
+            print("✅ targetId qabul qilindi: $targetId");
+
+            await teledart.sendMessage(
+              id,
+              '✍️ Фуқарога матни ва медиа юборинг. Тугатиш учун "✅ Доне" тугмасини босинг.',
+              replyMarkup: ReplyKeyboardMarkup(
+                keyboard: [
+                  [KeyboardButton(text: '✅ Done')],
+                ],
+                resizeKeyboard: true,
+                oneTimeKeyboard: true,
+              ),
+            );
+          } catch (e) {
+            await teledart.sendMessage(
+                id, '❌ Бу ИД бўйича фуқарога ёзиб бўлмади, қайта уруниб кўринг');
+            print('❌ sendMessage xatolik: $e');
+          }
+        } else {
+          await teledart.sendMessage(id, '❌ ИД нотўғри киритилаяпди.');
+        }
+
+        return;
+      }
+
+// Admin javob yozish jarayonida
+      if (userStates[id]?['step'] == 'replying') {
+        final target = userStates[id]!['target'];
+
+        if (msg.text?.toLowerCase() == '✅ done' ||
+            msg.text?.toLowerCase() == 'done') {
+          for (var item in adminReplyData[id]!) {
+            if (item is String) {
+              await teledart.sendMessage(target, '✉️ Админдан:\n$item');
+            } else if (item is Message) {
+              if (item.photo != null) {
+                await teledart.sendPhoto(
+                  target,
+                  item.photo!.last.fileId,
+                  caption: '✉️ Админдан:',
+                );
+              } else if (item.document != null) {
+                await teledart.sendDocument(
+                  target,
+                  item.document!.fileId,
+                  caption: '✉️ Админдан:',
+                );
+              } else if (item.video != null) {
+                await teledart.sendVideo(
+                  target,
+                  item.video!.fileId,
+                  caption: '✉️ Админдан:',
+                );
+              } else {
+                // Fallback: oddiy forward
+                await teledart.forwardMessage(target, id, item.messageId);
+              }
+            }
+          }
+
+          await teledart.sendMessage(id, '✅ Жавоб юборилди.',
+              replyMarkup: ReplyKeyboardRemove(removeKeyboard: true));
+
+          userStates.remove(id);
+          adminReplyData.remove(id);
+        } else {
+          // Media yoki matn qo‘shish
+          if (msg.text != null) {
+            adminReplyData[id]!.add(msg.text!);
+          } else if (msg.photo != null ||
+              msg.document != null ||
+              msg.video != null) {
+            adminReplyData[id]!.add(msg);
+          }
+        }
+        return;
+      }
+    }
 
     switch (step) {
       case 'name':
         data['name'] = msg.text;
+        state['step'] = 'region';
+
+        await teledart.sendMessage(
+          id,
+          '📍 Яшаш ҳудудингизни танланг:',
+          replyMarkup: ReplyKeyboardMarkup(
+            keyboard: districts.map((d) => [KeyboardButton(text: d)]).toList(),
+            resizeKeyboard: true,
+            oneTimeKeyboard: true,
+          ),
+        );
+        break;
+
+      case 'region':
+        if (!districts.contains(msg.text)) {
+          await teledart.sendMessage(id, '❗ Илтимос, рўйхатдан танланг.');
+          return;
+        }
+
+        data['region'] = msg.text;
         state['step'] = 'address';
-        await teledart.sendMessage(id, '📍 Manzilingizni kiriting:');
+        await teledart.sendMessage(
+          id,
+          '📍 Яшаш манзилингизни киритинг:',
+          replyMarkup: ReplyKeyboardRemove(removeKeyboard: true),
+        );
         break;
 
       case 'address':
         data['address'] = msg.text;
         state['step'] = 'phone';
-        await teledart.sendMessage(id, '📞 Telefon raqamingizni kiriting:');
+
+        await teledart.sendMessage(
+          id,
+          '📞 Телефон рақамингизни киритинг ёки тугмадан фойдаланинг:',
+          replyMarkup: ReplyKeyboardMarkup(
+            keyboard: [
+              [
+                KeyboardButton(
+                  text: '📲 Рақамни юбориш',
+                  requestContact: true,
+                )
+              ]
+            ],
+            resizeKeyboard: true,
+            oneTimeKeyboard: true,
+          ),
+        );
         break;
 
       case 'phone':
+        String? phone;
 
-        // oddiy validatsiya: kamida 7ta raqam bo‘lishi kerak
+        if (msg.contact != null) {
+          phone = msg.contact!.phoneNumber;
+        } else if (msg.text != null && msg.text!.length >= 7) {
+          phone = msg.text!;
+        }
 
-        data['phone'] = msg.text.toString();
-        state['step'] = 'message';
-        await teledart.sendMessage(id, '💬 Murojaat/taklif matnini yozing:');
+        if (phone != null) {
+          data['phone'] = phone;
+          state['step'] = 'message';
+          await teledart.sendMessage(
+            id,
+            '💬 Ариза, таклиф ёки мурожаатингизни киритинг:',
+            replyMarkup: ReplyKeyboardRemove(removeKeyboard: true),
+          );
+        } else {
+          await teledart.sendMessage(
+            id,
+            '📞Илтимос, рақамни ёзинг ёки 📲 тугмани босинг:',
+          );
+        }
         break;
 
       case 'message':
@@ -84,19 +263,15 @@ void startBot() async {
         state['step'] = 'await_file_choice';
         await teledart.sendMessage(
           id,
-          '📎 Qo‘shimcha fayl yuborasizmi?',
+          '📎 Қўшимча файл юборасизми?',
           replyMarkup: InlineKeyboardMarkup(inlineKeyboard: [
             [
               InlineKeyboardButton(
-                  text: '📎 Ha, bor', callbackData: 'add_files'),
-              InlineKeyboardButton(text: '❌ Yo‘q', callbackData: 'no_files'),
+                  text: '📎 Ҳа, бор', callbackData: 'add_files'),
+              InlineKeyboardButton(text: '❌ Ёқ', callbackData: 'no_files'),
             ]
           ]),
         );
-        break;
-
-      case 'await_file_choice':
-        // foydalanuvchi fayl yuboradi yoki /done bosadi, hech narsa qilinmaydi
         break;
 
       case 'file':
@@ -116,23 +291,24 @@ void startBot() async {
     state['step'] = 'confirm';
 
     final summary = '''
-📝 Kiritilgan ma’lumotlar:
-👤 Ism: ${d['name'] ?? '❓'}
-📍 Manzil: ${d['address'] ?? '❓'}
-📞 Telefon: ${d['phone'] ?? '❓'}
-💬 Murojaat: ${d['text'] ?? '❓'}
+📝 Киритилган маълумотлар:
+👤 Исм: ${d['name']}
+🏘 Ҳудуд: ${d['region']}
+📍 Манзил: ${d['address']}
+📞 Телефон: ${d['phone']}
+💬 Мурожаат: ${d['text']}
 ''';
 
     await teledart.sendMessage(id, summary);
     await teledart.sendMessage(
       id,
-      '❓ Ma’lumotlar to‘g‘rimi?',
+      '❓ Маълумотлар тўғрими??',
       replyMarkup: InlineKeyboardMarkup(inlineKeyboard: [
         [
           InlineKeyboardButton(
-              text: '✅ Ha, to‘g‘ri', callbackData: 'confirm_yes'),
+              text: '✅ Ҳа, тўғри', callbackData: 'confirm_yes'),
           InlineKeyboardButton(
-              text: '♻️ Yo‘q, qayta kiritaman', callbackData: 'confirm_no'),
+              text: '♻️ Ёқ, қайта киритаман', callbackData: 'confirm_no'),
         ]
       ]),
     );
@@ -148,74 +324,57 @@ void startBot() async {
     switch (cb.data) {
       case 'add_files':
         state['step'] = 'file';
-        await teledart.sendMessage(
-          id,
-          '📎 Fayllarni yuboring. Tugatish uchun /done ni bosing.',
-        );
+        await teledart.sendMessage(id,
+            '📎 Файлларни юборинг. Якунлаш учун /done буйруғини босинг..');
         break;
 
       case 'no_files':
         state['step'] = 'confirm';
         final summary = '''
-📝 Kiritilgan ma’lumotlar:
-👤 Ism: ${d['name'] ?? '❓'}
-📍 Manzil: ${d['address'] ?? '❓'}
-📞 Telefon: ${d['phone'] ?? '❓'}
-💬 Murojaat: ${d['text'] ?? '❓'}
+📝 Киритилган маълумотлар:
+👤 Исм: ${d['name']}
+🏘 Ҳудуд: ${d['region']}
+📍 Манзил: ${d['address']}
+📞 Телефон: ${d['phone']}
+💬 Мурожаат: ${d['text']}
 ''';
         await teledart.sendMessage(id, summary);
         await teledart.sendMessage(
           id,
-          '❓ Ma’lumotlar to‘g‘rimi?',
-          replyMarkup: InlineKeyboardMarkup(inlineKeyboard: [
-            [
-              InlineKeyboardButton(
-                text: '✅ Ha, to‘g‘ri',
-                callbackData: 'confirm_yes',
-              ),
-              InlineKeyboardButton(
-                text: '♻️ Yo‘q, qayta kiritaman',
-                callbackData: 'confirm_no',
-              ),
-            ]
+          '❓ Маълумотлар тўғрими??',
+      replyMarkup: InlineKeyboardMarkup(inlineKeyboard: [
+        [
+          InlineKeyboardButton(
+              text: '✅ Ҳа, тўғри', callbackData: 'confirm_yes'),
+          InlineKeyboardButton(
+              text: '♻️ Ёқ, қайта киритаман', callbackData: 'confirm_no'),
+        ]
           ]),
         );
         break;
 
       case 'confirm_yes':
         final finalSummary = '''
-🆕 Yangi murojaat:
-🆔 Telegram ID: $id
-👤 Ism: ${d['name'] ?? '❓'}
-📍 Manzil: ${d['address'] ?? '❓'}
-📞 Telefon: ${d['phone'] ?? '❓'}
-💬 Murojaat: ${d['text'] ?? '❓'}
+🆕 Янги мурожаат:
+🆔 Телеграм ИД $id
+👤 Исм: ${d['name']}
+🏘 Ҳудуд: ${d['region']}
+📍 Манзил: ${d['address']}
+📞 Телефон: ${d['phone']}
+💬 Мурожаат: ${d['text']}
 
-✍️ Javob berish: /reply $id [javob matni]
+✍️ Жавоб: /reply $id
 ''';
 
         await teledart.sendMessage(adminId, finalSummary);
-
-        // Fayllar bo‘lsa, adminga jo‘natamiz
-        if (d.containsKey('files') && d['files'] is List) {
-          for (final file in d['files']) {
-            await teledart.sendDocument(adminId, file);
-          }
-        }
-
-        await teledart.sendMessage(
-          id,
-          '✅ Murojaatingiz qabul qilindi. Tez orada sizga javob beriladi. /start bilan yana yuborishingiz mumkin.',
-        );
-
+        await teledart.sendMessage(id,
+            '✅ Мурожаатингиз қабул қилинди. Белгиланган муддат ичида кўриб чиқилиб, муаулифга маълум қилинади.');
         userStates.remove(id);
         break;
 
       case 'confirm_no':
         await teledart.sendMessage(
-          id,
-          '♻️ Qayta boshlash uchun /start ni bosing.',
-        );
+            id, '♻️ Қайта бошлаш учун /start ни босинг.');
         userStates.remove(id);
         break;
     }
