@@ -11,7 +11,7 @@ void startBot() async {
   final telegram = Telegram(botToken);
   final me = await telegram.getMe();
   final teledart = TeleDart(botToken, Event(me.username!));
-  final adminIds = [1794743491, 987654321]; // Admin Telegram ID lar
+  final adminIds = [1794743491, 283764137]; // Admin Telegram ID lar
 
   final Map<int, List<dynamic>> adminReplyData = {};
 
@@ -22,9 +22,9 @@ void startBot() async {
     "Жиззах шаҳар",
     "Арнасой тумани",
     "Бахмал тумани",
-    "Доʻстлик тумани",
+    "Дустлик тумани",
     "Фориш тумани",
-    "Гʻаллаорол тумани",
+    "Галлаорол тумани",
     "Мирзачоʻл тумани",
     "Пахтакор тумани",
     "Янгиобод тумани",
@@ -40,20 +40,17 @@ void startBot() async {
     if (adminIds.contains(id)) {
       await teledart.sendMessage(
         id,
-        '👋 Админ панелга хуш келибсиз.',
-        replyMarkup: ReplyKeyboardMarkup(
-          keyboard: [
-            [KeyboardButton(text: '📨 Фойдаланувчига жавоб бериш')],
-          ],
-          resizeKeyboard: true,
-          oneTimeKeyboard: false,
-        ),
+        'Админ панелга хуш келибсиз.',
       );
     } else {
       userStates[msg.chat.id] = {'step': 'name', 'data': {}};
+      await teledart.sendMessage(
+        id,
+        'Ассалому алайкум! Ҳурматли фуқаро, ушбу телеграм бот орқали қонун бузилиш ҳолатлари юзасидан ариза, таклифлар ва шикоятларингизни Жиззах вилояти прокуратурасига юбориш мумкин.',
+      );
       teledart.sendMessage(
         msg.chat.id,
-        '👋 Ассалом алекум! ҳурматли фуқаро, Ариза, таклиф ва мурожаатларни  юбориш учун исм‑фамилиянгизни киритинг:',
+        'Исм‑фамилиянгизни киритинг:',
       );
     }
   });
@@ -70,8 +67,8 @@ void startBot() async {
     userStates[id] = {'step': 'await_user_id'};
     adminReplyData[id] = [];
 
-    await teledart.sendMessage(id,
-        '👤 Жавоб юбормоқчи бўлган фуқаронинг Телеграм ИД сини киритинг:');
+    await teledart.sendMessage(
+        id, '👤 Жавоб юбормоқчи бўлган фуқаронинг Телеграм ИД сини киритинг:');
   });
 
   teledart.onMessage().listen((msg) async {
@@ -115,8 +112,8 @@ void startBot() async {
               ),
             );
           } catch (e) {
-            await teledart.sendMessage(
-                id, '❌ Бу ИД бўйича фуқарога ёзиб бўлмади, қайта уруниб кўринг');
+            await teledart.sendMessage(id,
+                '❌ Бу ИД бўйича фуқарога ёзиб бўлмади, қайта уруниб кўринг');
             print('❌ sendMessage xatolik: $e');
           }
         } else {
@@ -214,10 +211,11 @@ void startBot() async {
       case 'address':
         data['address'] = msg.text;
         state['step'] = 'phone';
+        userStates[id] = state;
 
         await teledart.sendMessage(
           id,
-          '📞 Телефон рақамингизни киритинг ёки тугмадан фойдаланинг:',
+          '📞 Телефон рақамингизни киритинг: (масалан: 998901234567)',
           replyMarkup: ReplyKeyboardMarkup(
             keyboard: [
               [
@@ -236,24 +234,40 @@ void startBot() async {
       case 'phone':
         String? phone;
 
+        // 📲 tugma orqali raqam yuborilganda
         if (msg.contact != null) {
           phone = msg.contact!.phoneNumber;
-        } else if (msg.text != null && msg.text!.length >= 7) {
-          phone = msg.text!;
         }
 
+        // Foydalanuvchi qo‘lda raqam kiritsa
+        else if (msg.text != null) {
+          // Kirgan matndan raqamdan boshqa belgilarni olib tashlaydi (masalan, +, - va boshqalar)
+          final cleaned = msg.text!.replaceAll(RegExp(r'\D'), '');
+
+          // Raqam uzunligi to‘g‘ri bo‘lsa qabul qiladi
+          if (cleaned.length >= 7 && cleaned.length <= 15) {
+            phone = cleaned;
+          }
+        }
+
+        // Agar phone aniqlangan bo‘lsa – keyingi bosqichga o‘tadi
         if (phone != null) {
           data['phone'] = phone;
           state['step'] = 'message';
+          userStates[id] = state;
+
           await teledart.sendMessage(
             id,
-            '💬 Ариза, таклиф ёки мурожаатингизни киритинг:',
+            '💬 Мурожаатингиз матнини киритинг:',
             replyMarkup: ReplyKeyboardRemove(removeKeyboard: true),
           );
-        } else {
+        }
+
+        // Aks holda foydalanuvchidan to‘g‘ri format so‘raydi
+        else {
           await teledart.sendMessage(
             id,
-            '📞Илтимос, рақамни ёзинг ёки 📲 тугмани босинг:',
+            '📞 Илтимос, рақамни тўғри форматда ёзинг (масалан: 998901234567) ёки 📲 тугмани босинг:',
           );
         }
         break;
@@ -263,12 +277,11 @@ void startBot() async {
         state['step'] = 'await_file_choice';
         await teledart.sendMessage(
           id,
-          '📎 Қўшимча файл юборасизми?',
+          '📎 Мурожаатингизга илова қилинадиган қўшимча маълумотлар мавжудми?',
           replyMarkup: InlineKeyboardMarkup(inlineKeyboard: [
             [
-              InlineKeyboardButton(
-                  text: '📎 Ҳа, бор', callbackData: 'add_files'),
-              InlineKeyboardButton(text: '❌ Ёқ', callbackData: 'no_files'),
+              InlineKeyboardButton(text: '📎 Ҳа', callbackData: 'add_files'),
+              InlineKeyboardButton(text: '❌ йўқ', callbackData: 'no_files'),
             ]
           ]),
         );
@@ -291,7 +304,7 @@ void startBot() async {
     state['step'] = 'confirm';
 
     final summary = '''
-📝 Киритилган маълумотлар:
+📝 Мурожаат ҳақида маълумот:
 👤 Исм: ${d['name']}
 🏘 Ҳудуд: ${d['region']}
 📍 Манзил: ${d['address']}
@@ -324,14 +337,14 @@ void startBot() async {
     switch (cb.data) {
       case 'add_files':
         state['step'] = 'file';
-        await teledart.sendMessage(id,
-            '📎 Файлларни юборинг. Якунлаш учун /done буйруғини босинг..');
+        await teledart.sendMessage(
+            id, '📎 Файлларни юборинг. Якунлаш учун /done буйруғини босинг..');
         break;
 
       case 'no_files':
         state['step'] = 'confirm';
         final summary = '''
-📝 Киритилган маълумотлар:
+📝 Мурожаат ҳақида маълумот:
 👤 Исм: ${d['name']}
 🏘 Ҳудуд: ${d['region']}
 📍 Манзил: ${d['address']}
@@ -342,13 +355,13 @@ void startBot() async {
         await teledart.sendMessage(
           id,
           '❓ Маълумотлар тўғрими??',
-      replyMarkup: InlineKeyboardMarkup(inlineKeyboard: [
-        [
-          InlineKeyboardButton(
-              text: '✅ Ҳа, тўғри', callbackData: 'confirm_yes'),
-          InlineKeyboardButton(
-              text: '♻️ Ёқ, қайта киритаман', callbackData: 'confirm_no'),
-        ]
+          replyMarkup: InlineKeyboardMarkup(inlineKeyboard: [
+            [
+              InlineKeyboardButton(
+                  text: '✅ Ҳа, тўғри', callbackData: 'confirm_yes'),
+              InlineKeyboardButton(
+                  text: '♻️ Ёқ, қайта киритаман', callbackData: 'confirm_no'),
+            ]
           ]),
         );
         break;
@@ -367,8 +380,15 @@ void startBot() async {
 ''';
 
         await teledart.sendMessage(adminId, finalSummary);
-        await teledart.sendMessage(id,
-            '✅ Мурожаатингиз қабул қилинди. Белгиланган муддат ичида кўриб чиқилиб, муаулифга маълум қилинади.');
+        await teledart.sendMessage(
+          id,
+          '✅ Мурожаатингиз қабул қилинди. Белгиланган муддатда кўриб чиқилиб, натижаси бўйича муаллифга маълум қилинади.'
+          '''\n\n🌐 Жиззах вилояти прокуратурасининг ижтимоий тармоқлардаги саҳифаларига аъзо бўлинг!
+
+<a href="https://t.me/jizzaxviloyatiprokuraturasi">Telegram</a> | <a href="https://www.instagram.com/jizzaxviloyatiprokuraturasi/">Instagram</a> | <a href="https://www.facebook.com/jizzaxviloyatiprokuraturasi/">Facebook</a> | <a href="https://www.youtube.com/@jizzaxviloyatiprokuraturasi">YouTube</a>''',
+          parseMode: 'HTML',
+          disableWebPagePreview: true,
+        );
         userStates.remove(id);
         break;
 
