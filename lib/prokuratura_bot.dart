@@ -6,16 +6,17 @@ import 'package:dotenv/dotenv.dart';
 void startBot() async {
   final env = DotEnv()..load();
   final botToken = env['BOT_TOKEN']!;
-  final adminId = 1794743491;
 
   final telegram = Telegram(botToken);
   final me = await telegram.getMe();
   final teledart = TeleDart(botToken, Event(me.username!));
-  final adminIds = [1794743491, 283764137]; // Admin Telegram ID lar
+  final adminIds = [1794743491, 283764137, 1811201802]; // Admin Telegram ID lar
+  // final adminIds = [1794743491]; // Admin Telegram ID lar
 
   final Map<int, List<dynamic>> adminReplyData = {};
 
   final userStates = <int, Map<String, dynamic>>{};
+  List allUserIds = [];
   teledart.start();
 
   final List<String> districts = [
@@ -43,6 +44,7 @@ void startBot() async {
         'Админ панелга хуш келибсиз.',
       );
     } else {
+      allUserIds.add(msg.chat.id);
       userStates[msg.chat.id] = {'step': 'name', 'data': {}};
       await teledart.sendMessage(
         id,
@@ -50,7 +52,7 @@ void startBot() async {
       );
       teledart.sendMessage(
         msg.chat.id,
-        'Исм‑фамилиянгизни киритинг:',
+        'Исм фамилиянгизни киритинг:',
       );
     }
   });
@@ -83,12 +85,20 @@ void startBot() async {
 
     if (adminIds.contains(id)) {
       if (msg.text == '📨 Fuqaroga javob berish') {
+        print('🟢 Tugma bosildi');
         userStates[id] = {'step': 'await_user_id'};
         adminReplyData[id] = [];
+        print('🟢 userStates[$id] = ${userStates[id]}');
         await teledart.sendMessage(
-            id, '🆔 Фуқаронинг телеграм ИД сини киритинг:');
+          id,
+          '🆔 Фуқаронинг телеграм ИД сини киритинг:',
+        );
         return;
       }
+
+// ID kiritilganda
+      print('🧪 Kirgan msg.text: ${msg.text}');
+      print('🧪 Holat: ${userStates[id]}');
       // Admin ID yuborgan bo‘lsa
       if (userStates[id]?['step'] == 'await_user_id') {
         print("await_user_id");
@@ -102,10 +112,10 @@ void startBot() async {
 
             await teledart.sendMessage(
               id,
-              '✍️ Фуқарога матни ва медиа юборинг. Тугатиш учун "✅ Доне" тугмасини босинг.',
+              '✍️ Фуқарога жавоб матни ёки медиа юборинг. Тугатиш учун "✅ Javobni yuborish" тугмасини босинг.',
               replyMarkup: ReplyKeyboardMarkup(
                 keyboard: [
-                  [KeyboardButton(text: '✅ Done')],
+                  [KeyboardButton(text: '✅ Javobni yuborish')],
                 ],
                 resizeKeyboard: true,
                 oneTimeKeyboard: true,
@@ -127,8 +137,8 @@ void startBot() async {
       if (userStates[id]?['step'] == 'replying') {
         final target = userStates[id]!['target'];
 
-        if (msg.text?.toLowerCase() == '✅ done' ||
-            msg.text?.toLowerCase() == 'done') {
+        if (msg.text?.toLowerCase() == '✅ Javobni yuborish'.toLowerCase() ||
+            msg.text?.toLowerCase() == 'Javobni yuborish'.toLowerCase()) {
           for (var item in adminReplyData[id]!) {
             if (item is String) {
               await teledart.sendMessage(target, '✉️ Админдан:\n$item');
@@ -289,7 +299,9 @@ void startBot() async {
 
       case 'file':
         if (msg.document != null || msg.photo != null || msg.video != null) {
-          await teledart.forwardMessage(adminId, msg.chat.id, msg.messageId);
+          for (var admin in adminIds) {
+            await teledart.forwardMessage(admin, msg.chat.id, msg.messageId);
+          }
         }
         break;
     }
@@ -321,7 +333,7 @@ void startBot() async {
           InlineKeyboardButton(
               text: '✅ Ҳа, тўғри', callbackData: 'confirm_yes'),
           InlineKeyboardButton(
-              text: '♻️ Ёқ, қайта киритаман', callbackData: 'confirm_no'),
+              text: '♻️ йўқ, қайта киритаман', callbackData: 'confirm_no'),
         ]
       ]),
     );
@@ -360,7 +372,7 @@ void startBot() async {
               InlineKeyboardButton(
                   text: '✅ Ҳа, тўғри', callbackData: 'confirm_yes'),
               InlineKeyboardButton(
-                  text: '♻️ Ёқ, қайта киритаман', callbackData: 'confirm_no'),
+                  text: '♻️ йўқ, қайта киритаман', callbackData: 'confirm_no'),
             ]
           ]),
         );
@@ -379,7 +391,14 @@ void startBot() async {
 ✍️ Жавоб: /reply $id
 ''';
 
-        await teledart.sendMessage(adminId, finalSummary);
+        for (var admin in adminIds) {
+          try {
+            await teledart.sendMessage(admin, finalSummary);
+          } catch (e) {
+            print('❌ sendMessage xato adminID: $admin => $e');
+          }
+        }
+
         await teledart.sendMessage(
           id,
           '✅ Мурожаатингиз қабул қилинди. Белгиланган муддатда кўриб чиқилиб, натижаси бўйича муаллифга маълум қилинади.'
